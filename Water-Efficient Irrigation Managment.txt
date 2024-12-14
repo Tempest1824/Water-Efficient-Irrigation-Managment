@@ -1,0 +1,407 @@
+Hackathon(Hackcult):
+=================================================================================================================================================
+Title : Water-Efficient Irrigation Management
+=================================================================================================================================================
+•Description :
+The Water-Efficient Irrigation Management System is an automated solution designed to optimize water usage in agriculture. It utilizes two Arduino-based transmitter nodes equipped with moisture sensors to monitor soil moisture levels. These nodes wirelessly send data to a central receiver node, which controls a 24V motor and two solenoid valves via relays. When soil moisture falls below a set threshold, the system activates the motor and valves to irrigate two separate lands. If moisture levels are sufficient, irrigation remains off. This system minimizes water waste, conserves energy, and supports sustainable farming practices.
+-------------------------------------------------------------------------------------------------------------------------------------------------
+•Innovation Potential & Future Scope :
+ 1. Advancing Smart Agriculture 
+ 2. Enhanced Sensor Networks 
+ 3. Real-Time Data Monitoring
+ 4. Sustainability and Resource Management 
+ 5. Sustainable Agricultural Practice 
+ 6. Enhanced Resource Management
+--------------------------------------------------------------------------------------------------------------------------------------------------
+•Key Features: 
+  1. Monitor soil moisture levels in real-time. 
+  2. Automate irrigation based on threshold values. 
+  3. Optimize water usage and reduce waste. 
+  4. Promote energy efficiency and sustainable agriculture practices.
+--------------------------------------------------------------------------------------------------------------------------------------------------
+•Technology Stack / Tools Used:
+  1. Arduino uno microcontroller 
+  2. RF 433Mhz module
+  3. NodeMCU (ESP8266)
+--------------------------------------------------------------------------------------------------------------------------------------------------
+•Hardware Components:
+  1.Arduino uno microcontroller 
+  2.RF 433Mhz module 
+  3.24V motor 
+  4.Solenoid valve(24v 1.4A) 
+  5.Moisture sensor 
+  6.Relay module 
+  7.24V adapter 
+  8.LCD display 
+  9.Connectors
+-------------------------------------------------------------------------------------------------------------------------------------------------
+ •Benefits of Water-Efficient Irrigation System:
+  1.Enhanced Resource Management 
+  2.Improved Crop Resilience 
+  3.Sustainable Agricultural Practices
+--------------------------------------------------------------------------------------------------------------------------------------------------
+•Transmitter (Tx) & Receiver (Rx) Code:
+
+ →Tx:
+
+#include <RH_ASK.h>
+#ifdef RH_HAVE_HARDWARE_SPI
+#include <SPI.h> // Not actually used but needed to compile
+#endif
+
+// Initialize the RadioHead ASK driver
+RH_ASK driver;
+
+// Pin definition for the moisture sensor
+const int sensorPin = A0; // Moisture sensor connected to A0
+
+void setup()
+{
+    // Initialize RF driver
+    if (!driver.init())
+    {
+#ifdef RH_HAVE_SERIAL
+        Serial.println("RF module initialization failed!");
+#endif
+        while (1); // Halt program if initialization fails
+    }
+
+    // Initialize sensor
+    pinMode(sensorPin, INPUT);
+
+#ifdef RH_HAVE_SERIAL
+    Serial.begin(9600); // For debugging
+#endif
+}
+
+void loop()
+{
+    // Read moisture sensor value
+    int moisture = analogRead(sensorPin);
+
+    // Create a string message in the format "Moisture:XXXX"
+    char message[20];
+    snprintf(message, sizeof(message), "Moisture:%d", moisture);
+
+    // Send the message via RF
+    driver.send((uint8_t *)message, strlen(message));
+    driver.waitPacketSent(); 
+
+#ifdef RH_HAVE_SERIAL
+    // Debugging: Print the sent message to the Serial Monitor
+    Serial.print("Sent: ");
+    Serial.println(message);
+#endif
+
+    // Wait for 2 seconds before sending the next data
+    delay(2000);
+}
+
+→Rx:
+
+#include <RH_ASK.h>
+#include <LiquidCrystal.h>
+#ifdef RH_HAVE_HARDWARE_SPI
+#include <SPI.h> // Not actually used but needed to compile
+#endif
+
+// Initialize the RadioHead ASK driver
+RH_ASK driver;
+
+// Pin definitions for control
+#define ledPin 4    // Pin to control the LED
+#define motorPin 6  // Pin to control the motor
+#define relayPin 5  // Pin to control the relay
+
+// Initialize the LCD with appropriate pins
+LiquidCrystal lcd(7, 8, 9, 10, 12, 13); // RS, EN, D4, D5, D6, D7
+
+void setup()
+{
+    // Initialize the RF driver
+    if (!driver.init())
+    {
+#ifdef RH_HAVE_SERIAL
+        Serial.println("RF module initialization failed!");
+#endif
+        while (1); // Halt program if initialization fails
+    }
+
+#ifdef RH_HAVE_SERIAL
+    Serial.begin(9600); // For debugging
+#endif
+
+    // Initialize the LCD
+    lcd.begin(16, 2); // Set up the LCD's number of columns and rows
+    lcd.setCursor(0, 0);
+    lcd.print("Initializing...");
+    delay(2000);
+    lcd.clear();
+    lcd.print("Ready to Receive");
+    delay(2000);
+    lcd.clear();
+
+    // Initialize control pins
+    pinMode(ledPin, OUTPUT);
+    pinMode(motorPin, OUTPUT);
+    pinMode(relayPin, OUTPUT);
+
+    // Ensure initial state (everything off)
+    digitalWrite(ledPin, LOW);
+    digitalWrite(motorPin, LOW);
+    digitalWrite(relayPin, LOW);
+}
+
+void loop()
+{
+    // Buffer to hold received data
+    uint8_t buf[RH_ASK_MAX_MESSAGE_LEN];
+    uint8_t buflen = sizeof(buf);
+
+    // Check if a message is available
+    if (driver.recv(buf, &buflen))
+    {
+        // Null-terminate the received data to convert it to a string
+        buf[buflen] = '\0';
+
+        // Parse the received data (assumes format "Moisture:XXXX")
+        int moisture = 0;
+        sscanf((char *)buf, "Moisture:%d", &moisture);
+
+        // Display parsed data on the LCD
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Moisture:");
+        lcd.print(moisture);
+
+#ifdef RH_HAVE_SERIAL
+        // Debugging: Print the received message and parsed data to the Serial Monitor
+        Serial.print("Received: ");
+        Serial.println((char *)buf);
+        Serial.print("Moisture: ");
+        Serial.println(moisture);
+#endif
+
+        // Control LED, Motor, and Relay based on moisture level
+        if (moisture > 183) // Threshold for dry soil
+        {
+            // Moisture is low, activate systems
+            lcd.setCursor(0, 1);
+            lcd.print("LED:ON Motor:ON");
+            digitalWrite(ledPin, HIGH);    // Turn LED on
+            digitalWrite(motorPin, HIGH);  // Turn motor on
+            digitalWrite(relayPin, HIGH);  // Activate relay
+        }
+        else // Moisture is sufficient
+        {
+            // Moisture is sufficient, deactivate systems
+            lcd.setCursor(0, 1);
+            lcd.print("LED:OFF Motor:OFF");
+            digitalWrite(ledPin, LOW);     // Turn LED off
+            digitalWrite(motorPin, LOW);   // Turn motor off
+            digitalWrite(relayPin, LOW);   // Deactivate relay
+        }
+
+        // Add a small delay to allow the LCD to update
+        delay(2000);
+    }
+}
+
+-----------------------------------------------------------------------------------------------------------------------------------------------------
+•Turbidity Sensor Code:
+
+#include <LiquidCrystal.h>  // Include the standard LiquidCrystal library
+#define turbiditySensorPin A0  // Turbidity sensor connected to analog pin A0
+// Define turbidity threshold (you may need to calibrate this value)
+#define turbidityThreshold 45  // This is the threshold for dirty water (adjust this as needed)
+// Initialize the LCD (pin 12, 11, 5, 4, 3, 2 for RS, E, D4, D5, D6, D7)
+LiquidCrystal lcd(12, 11, 5, 4, 3, 2);
+
+void setup() {
+  // Initialize serial communication for debugging
+  Serial.begin(9600);
+  
+  // Initialize LCD
+  lcd.begin(16, 2);  // Set up the LCD's number of columns and rows
+  lcd.print("Water Quality");
+  delay(2000);
+  lcd.clear();
+}
+
+void loop() {
+  // Read the turbidity sensor value (0-1023)
+  int sensorValue = analogRead(turbiditySensorPin);
+  int turbidityValue = map(sensorValue, 0, 640, 100, 0);
+
+  // Print the turbidity value to the Serial Monitor for debugging
+  Serial.print("Turbidity: ");
+  Serial.println(turbidityValue);
+
+  // If the turbidity value is greater than the threshold, display water is dirty
+  if (turbidityValue > turbidityThreshold) {
+    Serial.println("Turbidity too high! Water is dirty.");
+    
+    // Update LCD to show the water is dirty
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Water is Dirty");
+    lcd.setCursor(0, 1);
+    lcd.print("Expel the water");
+    
+  } else {
+    // If the turbidity is below the threshold, display water is clean
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("Water is Clean");
+    lcd.setCursor(0, 1);
+    lcd.print("No Action Needed");
+  }
+  
+  // Wait for a moment before checking turbidity again
+  delay(2000);  // Check every 2 seconds (adjust as needed)
+}
+
+--------------------------------------------------------------------------------------------------------------------------------------------------
+•Arduino IDE {NodeMCU(ESP8266)} Code:
+
+#define BLYNK_TEMPLATE_ID "TMPL3aDga99FD"
+#define BLYNK_TEMPLATE_NAME "Hackcult"
+#define BLYNK_AUTH_TOKEN "e-Gkdnn1vkH_4ZTyQIRxcy_kToMkK-17"
+
+#include <ESP8266WiFi.h>
+#include <BlynkSimpleEsp8266.h>
+#include <ESP8266HTTPClient.h>
+#include <WiFiClient.h>
+#include <ArduinoJson.h>
+
+const char* ssid = "JioFiber-home";
+const char* password = "fey4sux1us";
+String openWeatherMapApiKey = "eb243844c7dc917199797a85c2f707ce";
+
+String city = "Tumakuru";
+String countryCode = "IN";
+
+unsigned long lastTime = 0;
+unsigned long timerDelay = 5000;  // 5 seconds delay
+
+String jsonBuffer;
+
+// Soil moisture sensor pin
+const int soilMoisturePin = A0;
+
+// Thresholds for crop quality
+const int soilMoistureLow = 300;
+const int soilMoistureHigh = 600;
+const float tempLow = 18.0;   // °C
+const float tempHigh = 30.0;  // °C
+
+// Motor and valve control pins
+const int motorPin = D1;
+const int valvePin = D2;
+
+// Blynk virtual pin assignments
+#define V_TEMP V0
+#define V_RAIN V1
+#define V_WEATHER_DESC V2
+#define V_SOIL_MOISTURE V3
+#define V_CROP_QUALITY V4
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(motorPin, OUTPUT);
+  pinMode(valvePin, OUTPUT);
+  digitalWrite(motorPin, LOW);
+  digitalWrite(valvePin, LOW);
+
+  WiFi.begin(ssid, password);
+  Serial.println("Connecting to WiFi...");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nConnected to WiFi!");
+
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, password);
+}
+
+void loop() {
+  Blynk.run();
+
+  if ((millis() - lastTime) > timerDelay) {
+    if (WiFi.status() == WL_CONNECTED) {
+      fetchWeatherAndUpdate();
+    } else {
+      Serial.println("WiFi Disconnected");
+    }
+    lastTime = millis();
+  }
+}
+
+void fetchWeatherAndUpdate() {
+  WiFiClient client;
+  HTTPClient http;
+  
+  String serverPath = "http://api.openweathermap.org/data/2.5/weather?q=" + city + "," + countryCode + "&APPID=" + openWeatherMapApiKey;
+  
+  http.begin(client, serverPath);
+  int httpResponseCode = http.GET();
+  
+  if (httpResponseCode > 0) {
+    jsonBuffer = http.getString();
+    DynamicJsonDocument doc(1024);
+    DeserializationError error = deserializeJson(doc, jsonBuffer);
+
+    if (!error) {
+      float temp = doc["main"]["temp"].as<float>() - 273.15;
+      float rain = doc.containsKey("rain") ? doc["rain"]["1h"].as<float>() : 0;
+      String weatherDescription = doc["weather"][0]["description"].as<String>();
+
+      int soilMoisture = analogRead(soilMoisturePin);
+      int soilMoisturePercentage = map(soilMoisture, 0, 1023, 0, 100);
+
+      String cropQuality = determineCropQuality(soilMoisture, temp);
+
+      // Send data to Blynk
+      Blynk.virtualWrite(V_TEMP, temp);
+      Blynk.virtualWrite(V_RAIN, rain);
+      Blynk.virtualWrite(V_WEATHER_DESC, weatherDescription);
+      Blynk.virtualWrite(V_SOIL_MOISTURE, 100 - soilMoisturePercentage);
+      Blynk.virtualWrite(V_CROP_QUALITY, cropQuality);
+
+      // Print data to Serial Monitor
+      Serial.printf("Temperature: %.2f°C\n", temp);
+      Serial.printf("Rain: %.2f mm\n", rain);
+      Serial.printf("Weather: %s\n", weatherDescription.c_str());
+      Serial.printf("Soil Moisture: %d%%\n", 100 - soilMoisturePercentage);
+      Serial.printf("Crop Quality: %s\n", cropQuality.c_str());
+    } else {
+      Serial.print("JSON Parsing Error: ");
+      Serial.println(error.c_str());
+    }
+  } else {
+    Serial.print("HTTP Error: ");
+    Serial.println(httpResponseCode);
+  }
+
+  http.end();
+}
+
+String determineCropQuality(int soilMoisture, float temp) {
+  if (soilMoisture < soilMoistureLow || soilMoisture > soilMoistureHigh) {
+    return "Poor";
+  } else if (temp < tempLow || temp > tempHigh) {
+    return "Moderate";
+  } else {
+    return "Good";
+  }
+}
+
+---------------------------------------------------------------------------------------------------------------------------------------------------
+
+
+
+
+
+
+
+
